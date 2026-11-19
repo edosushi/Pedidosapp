@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pedidos</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #f5f4f0; --surface: #ffffff; --border: rgba(0,0,0,0.1); --border-strong: rgba(0,0,0,0.18);
+      --text: #1a1a18; --text-muted: #7a7a74; --text-hint: #b0afa8;
+      --accent-bg: #1a1a18; --accent-text: #ffffff;
+      --success-bg: #e8f5ec; --success-text: #1e6b38;
+      --info-bg: #e8f0fb; --info-text: #1a4fa0;
+      --danger-bg: #fdecea; --danger-text: #b91c1c;
+      --radius: 12px; --radius-sm: 8px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #181816; --surface: #242422; --border: rgba(255,255,255,0.09); --border-strong: rgba(255,255,255,0.16);
+        --text: #f0efe8; --text-muted: #8a8a82; --text-hint: #555550;
+        --accent-bg: #f0efe8; --accent-text: #1a1a18;
+        --success-bg: #1a2e20; --success-text: #5cba7a;
+        --info-bg: #1a2340; --info-text: #7aaaf5;
+        --danger-bg: #2e1a1a; --danger-text: #f87171;
+      }
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .container { max-width: 540px; margin: 0 auto; padding: 2rem 1rem 7rem; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.75rem; }
+    .header h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.3px; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    #resumen-top { font-size: 13px; color: var(--text-muted); }
+    .btn-edit-toggle { font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; padding: 6px 14px; border-radius: 99px; border: 0.5px solid var(--border-strong); background: var(--surface); color: var(--text-muted); cursor: pointer; }
+    .btn-edit-toggle.active { background: var(--accent-bg); color: var(--accent-text); border-color: transparent; }
+    .proveedor-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 0.75rem; }
+    .proveedor-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .proveedor-nombre { font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; display: flex; align-items: center; gap: 8px; }
+    .badge-count { background: var(--info-bg); color: var(--info-text); font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 99px; text-transform: none; letter-spacing: 0; }
+    .seccion-label { font-size: 11px; font-weight: 500; color: var(--text-hint); text-transform: uppercase; letter-spacing: 0.08em; padding: 10px 0 2px; border-top: 0.5px solid var(--border); margin-top: 4px; }
+    .producto-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-top: 0.5px solid var(--border); gap: 12px; }
+    .producto-info { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+    .producto-codigo { font-size: 11px; color: var(--text-hint); letter-spacing: 0.04em; }
+    .producto-nombre { font-size: 15px; color: var(--text); }
+    .qty-control { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .qty-btn { width: 30px; height: 30px; border-radius: 50%; border: 0.5px solid var(--border-strong); background: var(--bg); color: var(--text); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
+    .qty-btn:active { transform: scale(0.94); }
+    .qty-num { font-size: 15px; font-weight: 500; min-width: 22px; text-align: center; color: var(--text-hint); }
+    .qty-num.activo { color: var(--info-text); }
+    .vacio { font-size: 13px; color: var(--text-hint); padding: 6px 0; font-style: italic; }
+    .edit-field { font-size: 14px; font-family: 'DM Sans', sans-serif; padding: 6px 10px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-strong); background: var(--bg); color: var(--text); outline: none; width: 100%; }
+    .edit-field:focus { border-color: var(--text-muted); }
+    .edit-proveedor-fields { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; flex: 1; margin-right: 10px; }
+    .edit-label { font-size: 11px; color: var(--text-hint); margin-bottom: 2px; }
+    .edit-producto-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-top: 0.5px solid var(--border); }
+    .edit-producto-row input { flex: 1; }
+    .btn-icon { width: 28px; height: 28px; border-radius: 50%; border: 0.5px solid var(--border-strong); background: var(--bg); color: var(--text-muted); font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .btn-icon.danger { color: var(--danger-text); border-color: var(--danger-text); background: var(--danger-bg); }
+    .btn-add { font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; padding: 6px 12px; border-radius: 99px; border: 0.5px solid var(--border-strong); background: var(--bg); color: var(--text-muted); cursor: pointer; margin-top: 8px; display: inline-block; }
+    .btn-del-proveedor { font-size: 13px; font-weight: 500; font-family: 'DM Sans', sans-serif; padding: 5px 12px; border-radius: 99px; border: 0.5px solid var(--danger-text); background: var(--danger-bg); color: var(--danger-text); cursor: pointer; flex-shrink: 0; }
+    .add-proveedor-btn { width: 100%; padding: 14px; border-radius: var(--radius); border: 0.5px dashed var(--border-strong); background: transparent; color: var(--text-muted); font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; margin-bottom: 0.75rem; }
+    .sticky-footer { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 540px; background: var(--bg); border-top: 0.5px solid var(--border); padding: 0.875rem 1rem; display: flex; gap: 10px; }
+    .btn { flex: 1; padding: 12px; border-radius: var(--radius-sm); font-size: 15px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; border: 0.5px solid var(--border-strong); background: var(--surface); color: var(--text); -webkit-tap-highlight-color: transparent; }
+    .btn:active { opacity: 0.7; }
+    .btn-enviar { background: var(--accent-bg); color: var(--accent-text); border-color: transparent; }
+    .btn-jefe { background: var(--success-bg); color: var(--success-text); border-color: transparent; }
+    .btn-reset { background: var(--danger-bg); color: var(--danger-text); border-color: transparent; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 1rem; }
+    .modal { background: var(--surface); border-radius: var(--radius); border: 0.5px solid var(--border); padding: 1.5rem; width: 100%; max-width: 320px; }
+    .modal h3 { font-size: 17px; font-weight: 500; margin-bottom: 1rem; }
+    .modal input { width: 100%; font-size: 15px; font-family: 'DM Sans', sans-serif; padding: 10px 12px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-strong); background: var(--bg); color: var(--text); margin-bottom: 1rem; outline: none; }
+    .modal-btns { display: flex; gap: 8px; }
+    .modal-btns button { flex: 1; padding: 10px; border-radius: var(--radius-sm); border: 0.5px solid var(--border-strong); font-size: 14px; font-weight: 500; font-family: 'DM Sans', sans-serif; cursor: pointer; background: var(--bg); color: var(--text); }
+    .modal-btns button.ok { background: var(--accent-bg); color: var(--accent-text); border-color: transparent; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Pedidos</h1>
+    <div class="header-right">
+      <span id="resumen-top"></span>
+      <button class="btn-edit-toggle" id="edit-toggle" onclick="toggleEdit()">Editar</button>
+    </div>
+  </div>
+  <div id="proveedores-container"></div>
+  <button class="add-proveedor-btn" id="btn-add-proveedor" style="display:none" onclick="addProveedor()">+ Añadir proveedor</button>
+</div>
+
+<div class="sticky-footer" id="footer-pedidos">
+  <button class="btn btn-enviar" onclick="abrirModal()">📲 Enviar pedidos</button>
+  <button class="btn btn-jefe" onclick="enviarJefe()">✉️ Resumen al jefe</button>
+  <button class="btn btn-reset" onclick="resetear()">🔄 Resetear</button>
+</div>
+<div class="sticky-footer" id="footer-edit" style="display:none">
+  <button class="btn btn-enviar" onclick="guardarYSalir()">✓ Guardar cambios</button>
+</div>
+
+<div class="modal-overlay" id="modal" style="display:none">
+  <div class="modal">
+    <h3>¿Para qué día?</h3>
+    <input type="text" id="dia-input" placeholder="ej: miércoles" />
+    <div class="modal-btns">
+      <button onclick="cerrarModal()">Cancelar</button>
+      <button class="ok" onclick="enviarTodos()">Enviar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TEL_JEFE = "34670835948";
+
+// Productos con código: [codigo, nombre]
+// Productos sin código: [null, nombre]
+const DATA_DEFAULT = [
+  { nombre: "Tokyo-ya", tel: "34680901400", secciones: [
+    { label: "Comida", productos: [
+      ["090111","Utage Rice"],["101803","Katsuo Bushi Standard"],["0616A","Golden Curry Hot"],
+      ["0371A","Okonomi Sauce"],["0370B","Yakisoba Sauce"],["142206","Takuan Ipponzuke 500g"],
+      ["1472","Takuan Ipponzuke 350g"],["1014","Aonoriko"],["0451","Itacho Shiro"],
+      ["077240","Mayonesa"],["XL20912","Ajinomoto"],["XL21016","Katakuriko"],
+      ["057302","Kome Su Uchibori Pro"],["0311B","Yamasa Shoyu 18L"],["0398","Kikkoman Shoyu 20L"],
+      ["071201","Kona Wasabi"],["092402","Panko Marrón 6mm"],["150002","Salsa Sriracha"],
+      ["150078","Salsa de Ostras"],["0533","Goma Dressing"],["142202","Beni Shoga Sengiri"],
+      ["1459","Umeboshi Pet"],["1095","Yakinori Premium"],["141044","Gari Shiro"],
+      ["115094","Masago Arare"],["C-909","Masago Yuzu"],["C-KHY-038","Ikura Keta"],
+      ["C-NTC001","Unagi Kabayaki"],["C-TK004","Ebi Fry 3L"],["C-105","Edamame"],
+      ["C-352","Pan Bao"],["C-AJ0002","Yasai Gyoza"],["C-AJ0001A","Gyoza Tori & Yasai"],
+      ["C-AJ0022","Gyoza Duck"],["C-AJ0026","Ebi Gyoza"],["C-953","Kaki Furai S"],
+      ["US020","Momen Tofu"],["C-WA503","Dorayaki Chocolate"],["C-DL001","Bracitos Té y Azuki"],
+      ["055002","Ryorishu Sake Cocinar"],["055001","Mirin Fu"],["AI-PS053","Pasta de Ají Amarillo"],
+      ["159222","Salsa Tartufata"],["091701","Tempura Ko Age Jyozu"],["075711","Dashi No Moto"],
+      ["1021","Dashi Kombu"],["S-094","Teppo Gushi 120mm"],["S-095","Teppo Gushi 150mm"],
+      ["BUT-01","Cartucho Gas B-250"]
+    ]},
+    { label: "Menaje", productos: [
+      ["E-141","Bandeja Donburi Bowl"],["E-225","Bandeja 165x114"],["E-228","Bandeja 230x156"],
+      ["GUI-029","Tarrina"],["GUI-030","Tapa"]
+    ]},
+    { label: "Bebidas", productos: [
+      ["D-034","Sapporo"],["D-035","Sapporo Premium Can"],["D-249","Asahi"],
+      ["D-155","Kirin"],["D-156","Kirin Free"],["D-218","Owa Beer"],["D-214","Kuro Owa"],
+      ["D-4583B","Raifuku Junmaiginjo"],["D-354B","Ichinokura Himezen"],
+      ["D-581C","Kubota Junmai Daiginjo"],["JF1323","Ramune"],["JF1305","Ramune Fresa"],
+      ["CHO-01","Choya Umeshu Original"]
+    ]}
+  ]},
+  { nombre: "Yamaaoi", tel: "34682902524", secciones: [{ label: null, productos: [
+    [null,"Wasabi 250gr"]
+  ]}]},
+  { nombre: "Pelayo Iberdeli", tel: "34628139585", secciones: [{ label: null, productos: [
+    [null,"Rabillo de cadera"],[null,"Tapa"]
+  ]}]},
+  { nombre: "Yuzu pastri", tel: "34644871002", secciones: [{ label: null, productos: [
+    [null,"Chocolate"],[null,"Kinder"],[null,"Cheesecake"],[null,"Pistacho"],[null,"Mango"],[null,"Caramelo salado"]
+  ]}]},
+  { nombre: "Román y Martos", tel: "34637479461", secciones: [{ label: null, productos: [
+    [null,"Salmón 6/7"],[null,"Salmón 7/8"],[null,"Lubina 800/900"],[null,"Lubina 1400/1800"],
+    [null,"Hamachi 1300/2000"],[null,"Hamachi 3000/4000"],[null,"Pulpo 4kg~"]
+  ]}]},
+  { nombre: "Cominport", tel: "34669434101", secciones: [{ label: null, productos: [
+    ["204420","Nabo amarillo"],["204383","Unagi"],["203308","Ebi fry"],["201686","Palillos"],
+    [null,"Atún rojo akami"],[null,"Atún rojo chutoro"],[null,"Atún rojo otoro"],
+    [null,"Salmón fresco"],[null,"Sésamo dorado"],[null,"Sésamo negro"]
+  ]}]},
+  { nombre: "Dacrisa", tel: "34678299466", secciones: [{ label: null, productos: [
+    [null,"Contramuslo de pollo"],[null,"Pechuga de pollo"],[null,"Panceta de cerdo con piel"],
+    [null,"Solomillo de ternera"],[null,"Lomo bajo de ternera"],[null,"Huevos"]
+  ]}]},
+  { nombre: "Victoria", tel: "34670835948", secciones: [{ label: null, productos: [
+    [null,"Barril Victoria 30L"],[null,"Caja Victoria 33cl"],[null,"Caja Victoria sin 33cl"],
+    [null,"Caja Daura sin gluten"],[null,"Caja Nestea"],[null,"Caja agua liviana 50cl"],
+    [null,"Caja agua gas Pirinea 50cl"],[null,"Caja agua liviana plástico llevar"],
+    [null,"Botellas vino tinto Cueva de Lobos"],[null,"Botellas vino blanco Cueva de Lobos"],
+    [null,"Botellas vino rosado Cueva de Lobos"],[null,"Botellas vino verdejo Finca de los Trenzones"],
+    [null,"Botellas vino tinto ribera Pozo de Nieve"],[null,"Botellas vino blanco Chardonnay Viñas del Vero"],
+    [null,"Botellas vino blanc Pescador aguja"],[null,"Kg Café normal"],[null,"Kg Café descafeinado"],
+    [null,"Caja Azúcar"],[null,"Caja Sacarina"],[null,"Caja leche sin lactosa"],[null,"Caja leche avena"],
+    [null,"Botellas casera limón"],[null,"Botellas casera blanca"],[null,"Garrafa 5L Agua"],
+    [null,"Cocacola 2L"],[null,"Cocacola zero 2L"]
+  ]}]},
+  { nombre: "Coca Cola", tel: "34670835948", secciones: [{ label: null, productos: [
+    [null,"Caja Coca Cola"],[null,"Caja Coca Cola Zero"],[null,"Caja Coca Cola Zero Zero"],
+    [null,"Caja Fanta naranja"],[null,"Caja Fanta limón"],[null,"Caja Aquarius naranja"],
+    [null,"Caja Coca Cola plástico"],[null,"Caja Coca Cola Zero plástico"]
+  ]}]},
+  { nombre: "GM Comerco", tel: "34670835948", secciones: [{ label: null, productos: [
+    [null,"Bote té matcha"],[null,"Paquete rollo papel máquina"],[null,"Paquete papel baño"],
+    [null,"Paquete pastillas cisterna"],[null,"Paquete pañuelos"],[null,"Paquete palillos llevar"],
+    [null,"Caja tuppers llevar"],[null,"Paquete tupper salsas"],[null,"Bolsa plástico llevar"],
+    [null,"Bolsa cartón llevar"],[null,"Paquete servilletas mesa"]
+  ]}]}
+];
+
+let editMode = false;
+let data = cargarDatos();
+let cantidades = {};
+inicializarCantidades();
+
+function cargarDatos() {
+  try { const s = localStorage.getItem('pedidos_data2'); return s ? JSON.parse(s) : JSON.parse(JSON.stringify(DATA_DEFAULT)); }
+  catch(e) { return JSON.parse(JSON.stringify(DATA_DEFAULT)); }
+}
+
+function guardarDatos() { localStorage.setItem('pedidos_data2', JSON.stringify(data)); }
+
+function inicializarCantidades() {
+  cantidades = {};
+  data.forEach((p, pi) => p.secciones.forEach((s, si) => s.productos.forEach((_, pri) => { cantidades[`${pi}-${si}-${pri}`] = 0; })));
+}
+
+function toggleEdit() {
+  editMode = !editMode;
+  document.getElementById('edit-toggle').textContent = editMode ? 'Cancelar' : 'Editar';
+  document.getElementById('edit-toggle').classList.toggle('active', editMode);
+  document.getElementById('btn-add-proveedor').style.display = editMode ? 'block' : 'none';
+  document.getElementById('footer-pedidos').style.display = editMode ? 'none' : 'flex';
+  document.getElementById('footer-edit').style.display = editMode ? 'flex' : 'none';
+  render();
+}
+
+function leerDOM() {
+  data.forEach((p, pi) => {
+    const ne = document.getElementById(`p-nombre-${pi}`);
+    const te = document.getElementById(`p-tel-${pi}`);
+    if (ne) p.nombre = ne.value.trim() || p.nombre;
+    if (te) p.tel = te.value.trim() || p.tel;
+    p.secciones.forEach((s, si) => {
+      const le = document.getElementById(`s-label-${pi}-${si}`);
+      if (le) s.label = le.value.trim() || null;
+      s.productos = s.productos.map((prod, pri) => {
+        const codigoEl = document.getElementById(`cod-${pi}-${si}-${pri}`);
+        const nombreEl = document.getElementById(`prod-${pi}-${si}-${pri}`);
+        const codigo = codigoEl ? codigoEl.value.trim() || null : prod[0];
+        const nombre = nombreEl ? nombreEl.value.trim() : prod[1];
+        return [codigo, nombre];
+      }).filter(p => p[1] !== '');
+    });
+    p.secciones = p.secciones.filter(s => s.productos.length > 0 || s.label);
+  });
+}
+
+function guardarYSalir() {
+  leerDOM(); guardarDatos(); inicializarCantidades();
+  editMode = false;
+  document.getElementById('edit-toggle').textContent = 'Editar';
+  document.getElementById('edit-toggle').classList.remove('active');
+  document.getElementById('btn-add-proveedor').style.display = 'none';
+  document.getElementById('footer-pedidos').style.display = 'flex';
+  document.getElementById('footer-edit').style.display = 'none';
+  render();
+}
+
+function addProveedor() { leerDOM(); data.push({ nombre: "Nuevo proveedor", tel: "", secciones: [{ label: null, productos: [[null,""]] }] }); render(); }
+function delProveedor(pi) { if (!confirm(`¿Eliminar a ${data[pi].nombre}?`)) return; leerDOM(); data.splice(pi, 1); render(); }
+function addSeccion(pi) { leerDOM(); data[pi].secciones.push({ label: "Nueva sección", productos: [[null,""]] }); render(); }
+function addProducto(pi, si) { leerDOM(); data[pi].secciones[si].productos.push([null,""]); render(); }
+function delProducto(pi, si, pri) { leerDOM(); data[pi].secciones[si].productos.splice(pri, 1); render(); }
+
+function esc(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function render() {
+  const container = document.getElementById('proveedores-container');
+  container.innerHTML = '';
+  data.forEach((p, pi) => {
+    const card = document.createElement('div');
+    card.className = 'proveedor-card';
+    let html = '';
+    if (editMode) {
+      html = `<div class="proveedor-header">
+        <div class="edit-proveedor-fields">
+          <div><div class="edit-label">Nombre del proveedor</div><input class="edit-field" id="p-nombre-${pi}" value="${esc(p.nombre)}" placeholder="Nombre" /></div>
+          <div><div class="edit-label">Teléfono WhatsApp (sin + ni espacios)</div><input class="edit-field" id="p-tel-${pi}" value="${esc(p.tel)}" placeholder="34600000000" /></div>
+        </div>
+        <button class="btn-del-proveedor" onclick="delProveedor(${pi})">Eliminar</button>
+      </div>`;
+      p.secciones.forEach((s, si) => {
+        html += `<div style="margin-top:8px"><div class="seccion-label"><input class="edit-field" id="s-label-${pi}-${si}" value="${esc(s.label||'')}" placeholder="Nombre de sección (opcional)" style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em" /></div>`;
+        s.productos.forEach((prod, pri) => {
+          html += `<div class="edit-producto-row">
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <input class="edit-field" id="cod-${pi}-${si}-${pri}" value="${esc(prod[0]||'')}" placeholder="Código (opcional)" style="font-size:12px" />
+              <input class="edit-field" id="prod-${pi}-${si}-${pri}" value="${esc(prod[1]||'')}" placeholder="Nombre del producto" />
+            </div>
+            <button class="btn-icon danger" onclick="delProducto(${pi},${si},${pri})">×</button>
+          </div>`;
+        });
+        html += `<button class="btn-add" onclick="addProducto(${pi},${si})">+ Producto</button></div>`;
+      });
+      html += `<div style="margin-top:6px"><button class="btn-add" onclick="addSeccion(${pi})">+ Sección</button></div>`;
+    } else {
+      const totalActivos = p.secciones.reduce((acc, s, si) => acc + s.productos.filter((_, pri) => cantidades[`${pi}-${si}-${pri}`] > 0).length, 0);
+      html = `<div class="proveedor-header"><div class="proveedor-nombre">${esc(p.nombre)}${totalActivos > 0 ? `<span class="badge-count">${totalActivos} producto${totalActivos>1?'s':''}</span>` : ''}</div></div>`;
+      const tieneProductos = p.secciones.some(s => s.productos.length > 0);
+      if (!tieneProductos) {
+        html += `<div class="vacio">Sin productos configurados</div>`;
+      } else {
+        p.secciones.forEach((s, si) => {
+          if (s.label) html += `<div class="seccion-label">${esc(s.label)}</div>`;
+          html += s.productos.map((prod, pri) => {
+            const key = `${pi}-${si}-${pri}`; const qty = cantidades[key]||0;
+            const codigo = prod[0] ? `<span class="producto-codigo">${esc(prod[0])}</span>` : '';
+            return `<div class="producto-row">
+              <div class="producto-info">
+                ${codigo}
+                <span class="producto-nombre">${esc(prod[1])}</span>
+              </div>
+              <div class="qty-control">
+                <button class="qty-btn" onclick="cambiar(${pi},${si},${pri},-1)">−</button>
+                <span class="qty-num${qty>0?' activo':''}">${qty}</span>
+                <button class="qty-btn" onclick="cambiar(${pi},${si},${pri},1)">+</button>
+              </div>
+            </div>`;
+          }).join('');
+        });
+      }
+    }
+    card.innerHTML = html;
+    container.appendChild(card);
+  });
+  if (!editMode) {
+    const total = Object.values(cantidades).filter(v => v > 0).length;
+    document.getElementById('resumen-top').textContent = total > 0 ? `${total} producto${total>1?'s':''} seleccionado${total>1?'s':''}` : '';
+  } else {
+    document.getElementById('resumen-top').textContent = '';
+  }
+}
+
+function cambiar(pi, si, pri, delta) {
+  const key = `${pi}-${si}-${pri}`; cantidades[key] = Math.max(0, (cantidades[key]||0) + delta); render();
+}
+
+function abrirModal() {
+  if (!Object.values(cantidades).some(v => v > 0)) { alert('Añade al menos un producto antes de enviar.'); return; }
+  document.getElementById('modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('dia-input').focus(), 50);
+}
+
+function cerrarModal() { document.getElementById('modal').style.display = 'none'; }
+
+function buildMensaje(p, pi, dia) {
+  const lineas = [];
+  p.secciones.forEach((s, si) => {
+    const items = p.secciones[si].productos
+      .map((prod, pri) => ({ prod, qty: cantidades[`${pi}-${si}-${pri}`]||0 }))
+      .filter(x => x.qty > 0);
+    if (items.length === 0) return;
+    if (s.label) lineas.push(`— ${s.label} —`);
+    items.forEach(x => {
+      const linea = x.prod[0] ? `${x.prod[0]} ${x.prod[1]}` : x.prod[1];
+      lineas.push(`${linea} x${x.qty}`);
+    });
+  });
+  if (lineas.length === 0) return null;
+  return `Buenas, para el ${dia}\n${lineas.join('\n')}\nGracias`;
+}
+
+function enviarTodos() {
+  const dia = document.getElementById('dia-input').value.trim() || 'el próximo día';
+  cerrarModal();
+  data.forEach((p, pi) => { const msg = buildMensaje(p, pi, dia); if (!msg) return; window.open(`https://wa.me/${p.tel}?text=${encodeURIComponent(msg)}`, '_blank'); });
+  resetear();
+}
+
+function resetear() {
+  Object.keys(cantidades).forEach(k => { cantidades[k] = 0; });
+  render();
+}
+
+function enviarJefe() {
+  if (!Object.values(cantidades).some(v => v > 0)) { alert('No hay productos seleccionados.'); return; }
+  const dia = prompt('¿Para qué día son los pedidos?', 'el miércoles') || 'el próximo día';
+  let msg = `Pedidos para ${dia}:\n`;
+  data.forEach((p, pi) => {
+    const lineas = [];
+    p.secciones.forEach((s, si) => {
+      const items = p.secciones[si].productos
+        .map((prod, pri) => ({ prod, qty: cantidades[`${pi}-${si}-${pri}`]||0 }))
+        .filter(x => x.qty > 0);
+      if (items.length === 0) return;
+      if (s.label) lineas.push(`  — ${s.label} —`);
+      items.forEach(x => {
+        const linea = x.prod[0] ? `${x.prod[0]} ${x.prod[1]}` : x.prod[1];
+        lineas.push(`  ${linea} x${x.qty}`);
+      });
+    });
+    if (lineas.length === 0) return;
+    msg += `\n${p.nombre}\n${lineas.join('\n')}\n`;
+  });
+  window.open(`https://wa.me/${TEL_JEFE}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+render();
+</script>
+</body>
+</html>

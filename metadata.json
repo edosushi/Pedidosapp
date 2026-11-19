@@ -1,0 +1,6 @@
+{
+  "name": "Pedidos",
+  "description": "App de gestión y envío de pedidos a proveedores por WhatsApp para cocina y restaurante.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
