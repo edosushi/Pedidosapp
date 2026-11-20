@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.Window;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -20,6 +21,8 @@ import android.webkit.WebViewClient;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,9 +30,50 @@ public class MainActivity extends Activity {
     private static final String APP_HOST = "pedidos.local";
     private static final String APP_ORIGIN = "https://" + APP_HOST + "/";
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final int CREATE_BACKUP_REQUEST = 1002;
 
     private WebView webView;
     private ValueCallback<Uri[]> filePathCallback;
+    private String pendingBackupContent;
+
+    private class AndroidBridge {
+        @JavascriptInterface
+        public void exportBackup(final String filename, final String content) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    pendingBackupContent = content;
+                    Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("application/json");
+                    intent.putExtra(Intent.EXTRA_TITLE, filename != null && !filename.isEmpty() ? filename : "pedidos-copia.json");
+                    try {
+                        startActivityForResult(intent, CREATE_BACKUP_REQUEST);
+                    } catch (ActivityNotFoundException e) {
+                        pendingBackupContent = null;
+                        notifyBackupResult(false, "No se encontró el selector de archivos en el dispositivo.");
+                    }
+                }
+            });
+        }
+    }
+
+    private void notifyBackupResult(final boolean ok, final String message) {
+        if (webView == null) return;
+        final String safeMsg = message == null ? "" : message
+                .replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\n", " ");
+        final String js = "window.dispatchEvent(new CustomEvent('android-backup-result',{detail:{ok:"
+                + (ok ? "true" : "false")
+                + ",message:'" + safeMsg + "'}}));";
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                webView.evaluateJavascript(js, null);
+            }
+        });
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,6 +90,8 @@ public class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+        webView.addJavascriptInterface(new AndroidBridge(), "AndroidBridge");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -103,12 +149,21 @@ public class MainActivity extends Activity {
                 }
                 filePathCallback = callback;
                 try {
-                    Intent intent = fileChooserParams.createIntent();
+                    Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    intent.addCategory(Intent.CATEGORY_OPENABLE);
+                    intent.setType("*/*");
                     startActivityForResult(intent, FILE_CHOOSER_REQUEST);
                     return true;
                 } catch (ActivityNotFoundException e) {
-                    filePathCallback = null;
-                    return false;
+                    try {
+                        Intent fallbackIntent = fileChooserParams.createIntent();
+                        fallbackIntent.setType("*/*");
+                        startActivityForResult(fallbackIntent, FILE_CHOOSER_REQUEST);
+                        return true;
+                    } catch (ActivityNotFoundException ex) {
+                        filePathCallback = null;
+                        return false;
+                    }
                 }
             }
         });
@@ -166,6 +221,27 @@ public class MainActivity extends Activity {
             }
             filePathCallback.onReceiveValue(results);
             filePathCallback = null;
+        } else if (requestCode == CREATE_BACKUP_REQUEST) {
+            String content = pendingBackupContent;
+            pendingBackupContent = null;
+            if (resultCode == Activity.RESULT_OK && data != null && data.getData() != null && content != null) {
+                Uri uri = data.getData();
+                try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                    if (out != null) {
+                        out.write(content.getBytes(StandardCharsets.UTF_8));
+                        out.flush();
+                        notifyBackupResult(true, "Copia de seguridad guardada correctamente.");
+                    } else {
+                        notifyBackupResult(false, "No se pudo abrir el archivo de destino.");
+                    }
+                } catch (IOException e) {
+                    notifyBackupResult(false, "Error al escribir el archivo de copia.");
+                }
+            } else if (resultCode == Activity.RESULT_CANCELED) {
+                notifyBackupResult(false, "Guardado cancelado.");
+            } else {
+                notifyBackupResult(false, "No se pudo guardar la copia de seguridad.");
+            }
         }
     }
 

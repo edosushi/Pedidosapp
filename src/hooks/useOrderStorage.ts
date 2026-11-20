@@ -227,6 +227,7 @@ export function useOrderStorage() {
     setProductQuantity,
     resetQuantities,
     history,
+    setHistory,
     addHistoryEntry,
     deleteHistoryEntry,
     bossPhone,

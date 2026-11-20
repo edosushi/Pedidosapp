@@ -25,6 +25,7 @@ export default function App() {
     setProductQuantity,
     resetQuantities,
     history,
+    setHistory,
     addHistoryEntry,
     deleteHistoryEntry,
     bossPhone,
@@ -221,9 +222,13 @@ export default function App() {
           <CatalogEditorView
             suppliers={suppliers}
             bossPhone={bossPhone}
+            deliveryDay={deliveryDay}
+            history={history}
             theme={theme}
             onChangeSuppliers={setSuppliers}
             onChangeBossPhone={setBossPhone}
+            onChangeDeliveryDay={setDeliveryDay}
+            onChangeHistory={setHistory}
             onChangeTheme={setTheme}
             onRestoreDefaults={() => {
               restoreDefaultCatalog();

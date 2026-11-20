@@ -1,7 +1,10 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Check,
   ChevronDown,
   ChevronRight,
+  ClipboardPaste,
+  Copy,
   Download,
   Monitor,
   Moon,
@@ -15,15 +18,27 @@ import {
   X,
 } from 'lucide-react';
 import { createId } from '../data/defaultCatalog';
-import { Supplier, ThemePreference } from '../types/orders';
+import { OrderHistoryEntry, Supplier, ThemePreference } from '../types/orders';
 import { ConfirmSheet } from './ConfirmSheet';
+
+declare global {
+  interface Window {
+    AndroidBridge?: {
+      exportBackup?: (filename: string, content: string) => void;
+    };
+  }
+}
 
 interface CatalogEditorViewProps {
   suppliers: Supplier[];
   bossPhone: string;
+  deliveryDay: string;
+  history: OrderHistoryEntry[];
   theme: ThemePreference;
   onChangeSuppliers: (next: Supplier[]) => void;
   onChangeBossPhone: (phone: string) => void;
+  onChangeDeliveryDay: (day: string) => void;
+  onChangeHistory: (next: OrderHistoryEntry[]) => void;
   onChangeTheme: (theme: ThemePreference) => void;
   onRestoreDefaults: () => void;
 }
@@ -31,9 +46,13 @@ interface CatalogEditorViewProps {
 export const CatalogEditorView: React.FC<CatalogEditorViewProps> = ({
   suppliers,
   bossPhone,
+  deliveryDay,
+  history,
   theme,
   onChangeSuppliers,
   onChangeBossPhone,
+  onChangeDeliveryDay,
+  onChangeHistory,
   onChangeTheme,
   onRestoreDefaults,
 }) => {
@@ -45,8 +64,47 @@ export const CatalogEditorView: React.FC<CatalogEditorViewProps> = ({
   const [apkError, setApkError] = useState<string | null>(null);
   const [deleteSupplierTarget, setDeleteSupplierTarget] = useState<Supplier | null>(null);
   const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
-  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [backupNotice, setBackupNotice] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const [pasteModalOpen, setPasteModalOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [copiedBackup, setCopiedBackup] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+
+  const showBackupNotice = (type: 'success' | 'error', text: string) => {
+    if (noticeTimerRef.current !== null) {
+      window.clearTimeout(noticeTimerRef.current);
+    }
+    setBackupNotice({ type, text });
+    noticeTimerRef.current = window.setTimeout(() => {
+      setBackupNotice(null);
+      noticeTimerRef.current = null;
+    }, 4500);
+  };
+
+  useEffect(() => {
+    const onAndroidBackupResult = (event: Event) => {
+      const custom = event as CustomEvent<{ ok?: boolean; message?: string }>;
+      if (!custom.detail) return;
+      showBackupNotice(
+        custom.detail.ok ? 'success' : 'error',
+        custom.detail.message ||
+          (custom.detail.ok
+            ? 'Copia de seguridad guardada.'
+            : 'No se pudo guardar la copia.')
+      );
+    };
+    window.addEventListener('android-backup-result', onAndroidBackupResult);
+    return () => {
+      window.removeEventListener('android-backup-result', onAndroidBackupResult);
+      if (noticeTimerRef.current !== null) {
+        window.clearTimeout(noticeTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleDownloadApk = async () => {
     if (downloadingApk) return;
@@ -226,21 +284,106 @@ export const CatalogEditorView: React.FC<CatalogEditorViewProps> = ({
     }));
   };
 
-  const handleExport = () => {
+  const buildBackupJson = () => {
     const payload = {
+      version: 2,
       bossPhone,
+      deliveryDay,
       suppliers,
+      history,
       exportedAt: new Date().toISOString(),
     };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], {
-      type: 'application/json',
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pedidos-catalogo-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    return JSON.stringify(payload, null, 2);
+  };
+
+  const applyBackupText = (rawText: string): boolean => {
+    try {
+      const parsed = JSON.parse(rawText.trim());
+      if (!parsed || !Array.isArray(parsed.suppliers)) {
+        showBackupNotice(
+          'error',
+          'La copia no tiene un formato válido de catálogo.'
+        );
+        return false;
+      }
+      onChangeSuppliers(parsed.suppliers);
+      if (typeof parsed.bossPhone === 'string') {
+        onChangeBossPhone(parsed.bossPhone);
+      }
+      if (typeof parsed.deliveryDay === 'string' && parsed.deliveryDay.trim()) {
+        onChangeDeliveryDay(parsed.deliveryDay);
+      }
+      if (Array.isArray(parsed.history)) {
+        onChangeHistory(parsed.history);
+      }
+      showBackupNotice('success', 'Copia de seguridad restaurada correctamente.');
+      return true;
+    } catch {
+      showBackupNotice('error', 'El texto o archivo JSON no es válido.');
+      return false;
+    }
+  };
+
+  const handleExport = () => {
+    const jsonText = buildBackupJson();
+    const filename = `pedidos-copia-${new Date().toISOString().slice(0, 10)}.json`;
+
+    // Inside native Android APK WebView: use Storage Access Framework bridge
+    if (window.AndroidBridge?.exportBackup) {
+      window.AndroidBridge.exportBackup(filename, jsonText);
+      return;
+    }
+
+    try {
+      const blob = new Blob([jsonText], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      showBackupNotice(
+        'success',
+        'Copia de seguridad descargada. Si tu navegador la bloquea, usa «Copiar copia».'
+      );
+    } catch {
+      showBackupNotice(
+        'error',
+        'No se pudo descargar el archivo. Usa «Copiar copia» para guardarla como texto.'
+      );
+    }
+  };
+
+  const handleCopyBackup = async () => {
+    const jsonText = buildBackupJson();
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(jsonText);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = jsonText;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        textarea.remove();
+      }
+      setCopiedBackup(true);
+      window.setTimeout(() => setCopiedBackup(false), 2000);
+      showBackupNotice(
+        'success',
+        'Copia de seguridad copiada al portapapeles. Pégala en Notas o WhatsApp para guardarla.'
+      );
+    } catch {
+      showBackupNotice(
+        'error',
+        'No se pudo copiar automáticamente al portapapeles.'
+      );
+    }
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -248,21 +391,19 @@ export const CatalogEditorView: React.FC<CatalogEditorViewProps> = ({
     if (!file) return;
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed.suppliers)) {
-        onChangeSuppliers(parsed.suppliers);
-        if (typeof parsed.bossPhone === 'string') {
-          onChangeBossPhone(parsed.bossPhone);
-        }
-        setImportNotice('Catálogo importado correctamente.');
-      } else {
-        setImportNotice('El archivo no tiene un formato de catálogo válido.');
-      }
+      applyBackupText(text);
     } catch {
-      setImportNotice('No se pudo leer el archivo JSON seleccionado.');
+      showBackupNotice('error', 'No se pudo leer el archivo seleccionado.');
     }
     e.target.value = '';
-    setTimeout(() => setImportNotice(null), 3500);
+  };
+
+  const handleRestoreFromPaste = () => {
+    if (!pasteText.trim()) return;
+    if (applyBackupText(pasteText)) {
+      setPasteText('');
+      setPasteModalOpen(false);
+    }
   };
 
   return (
@@ -364,10 +505,32 @@ export const CatalogEditorView: React.FC<CatalogEditorViewProps> = ({
           <input
             ref={fileInputRef}
             type="file"
-            accept="application/json"
+            accept=".json,application/json,text/plain"
             onChange={handleImportFile}
             className="hidden"
           />
+
+          <button
+            type="button"
+            onClick={handleCopyBackup}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-black/12 dark:border-white/12 bg-transparent px-3.5 py-2 text-xs font-medium text-[#1a1a18] dark:text-[#f0efe8] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+          >
+            {copiedBackup ? (
+              <Check className="h-3.5 w-3.5 text-[#2a8549] dark:text-[#4cc376]" />
+            ) : (
+              <Copy className="h-3.5 w-3.5" />
+            )}
+            <span>{copiedBackup ? 'Copia copiada' : 'Copiar copia'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPasteModalOpen(true)}
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-black/12 dark:border-white/12 bg-transparent px-3.5 py-2 text-xs font-medium text-[#1a1a18] dark:text-[#f0efe8] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+          >
+            <ClipboardPaste className="h-3.5 w-3.5" />
+            <span>Pegar copia</span>
+          </button>
 
           <button
             type="button"
@@ -379,9 +542,16 @@ export const CatalogEditorView: React.FC<CatalogEditorViewProps> = ({
           </button>
         </div>
 
-        {importNotice && (
-          <p className="text-xs font-medium text-[#2a8549] dark:text-[#4cc376]">
-            {importNotice}
+        {backupNotice && (
+          <p
+            role="status"
+            className={`text-xs font-medium ${
+              backupNotice.type === 'error'
+                ? 'text-[#b91c1c] dark:text-red-400'
+                : 'text-[#2a8549] dark:text-[#4cc376]'
+            }`}
+          >
+            {backupNotice.text}
           </p>
         )}
       </section>
@@ -679,6 +849,62 @@ export const CatalogEditorView: React.FC<CatalogEditorViewProps> = ({
         }}
         onCancel={() => setConfirmRestoreOpen(false)}
       />
+
+      {pasteModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 p-0 sm:p-4 backdrop-blur-[2px]"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="paste-backup-title"
+          onClick={() => setPasteModalOpen(false)}
+        >
+          <div
+            className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl bg-white dark:bg-[#1e1e1c] border border-black/10 dark:border-white/10 p-5 pb-safe shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="space-y-1">
+              <h2
+                id="paste-backup-title"
+                className="text-base font-semibold text-[#1a1a18] dark:text-[#f0efe8]"
+              >
+                Pegar copia de seguridad
+              </h2>
+              <p className="text-xs text-[#6c6c66] dark:text-[#9a9991]">
+                Pega aquí el texto JSON que guardaste con &laquo;Copiar copia&raquo; o el contenido de tu archivo .json.
+              </p>
+            </div>
+
+            <textarea
+              rows={6}
+              value={pasteText}
+              onChange={(e) => setPasteText(e.target.value)}
+              placeholder='{"version": 2, "suppliers": [...]}'
+              className="w-full rounded-xl border border-black/12 dark:border-white/12 bg-[#f5f4f0] dark:bg-[#141413] p-3 font-mono-code text-xs text-[#1a1a18] dark:text-[#f0efe8] placeholder:text-[#9c9b94] focus:border-[#2a8549] focus:outline-none"
+            />
+
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPasteModalOpen(false);
+                  setPasteText('');
+                }}
+                className="min-h-[44px] rounded-xl border border-black/12 dark:border-white/12 bg-transparent px-4 py-2.5 text-sm font-medium text-[#1a1a18] dark:text-[#f0efe8] hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleRestoreFromPaste}
+                disabled={!pasteText.trim()}
+                className="min-h-[44px] rounded-xl bg-[#2a8549] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 cursor-pointer"
+              >
+                Restaurar copia
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
